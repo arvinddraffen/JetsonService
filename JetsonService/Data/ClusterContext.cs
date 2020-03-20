@@ -20,7 +20,7 @@ namespace JetsonService.Data
         /// Will create the SQLite database if not already created.
         /// </remarks>
         /// <param name="options"></param>
-        public ClusterContext (DbContextOptions<ClusterContext> options)
+        public ClusterContext(DbContextOptions<ClusterContext> options)
             : base(options)
         {
             this.Database.EnsureCreated();
@@ -39,8 +39,7 @@ namespace JetsonService.Data
                 .Property(x => x.Cores)
                 .HasConversion(
                     v => JsonConvert.SerializeObject(v),
-                    v => JsonConvert.DeserializeObject<ICollection<CpuCore>>(v)
-                );
+                    v => JsonConvert.DeserializeObject<ICollection<CpuCore>>(v));
         }
     }
 }
