@@ -15,18 +15,32 @@ namespace JetsonService
     {
         private static void Main(string[] args)
         {
+            var x = new System.Diagnostics.Stopwatch();
+            x.Start();
+
+            for (uint i = 0; i < 20; i++)
+            {
+                Build(2, i);
+            }
+
+            x.Stop();
+            Console.WriteLine($"Completed test build in {x.Elapsed.TotalSeconds} sec");
+        }
+
+        private static void Build(uint sampleClusterId, uint sampleNodeId)
+        {
             var optionsBuilder = new DbContextOptionsBuilder<ClusterContext>();
             optionsBuilder.EnableSensitiveDataLogging();
-            optionsBuilder.UseLazyLoadingProxies();
             optionsBuilder.UseSqlite("Data Source=data.db");
             var database = new ClusterContext(optionsBuilder.Options);
 
             /* Sample code for providing an entry into the database */
 
-            var sampleClusterId = 2U;
-
             // Find cluster with Id of 2. If not exists, create new cluster
-            var cluster = database.Clusters.Find(sampleClusterId);
+            var cluster = database.Clusters
+                .Include(c => c.Nodes)
+                .FirstOrDefault(c => c.Id == sampleClusterId);
+
             System.Diagnostics.Debug.WriteLine(cluster == null);
 
             if (cluster == null)
@@ -37,7 +51,6 @@ namespace JetsonService
                 database.Clusters.Add(cluster);
             }
 
-            var sampleNodeId = 1U;
             //// Find in cluster (cluster Id 2) with Id of 1. If not exists, create new node
             var node = cluster.Nodes.FirstOrDefault(n => n.Id == sampleNodeId);
 
@@ -47,18 +60,18 @@ namespace JetsonService
                 {
                     Id = sampleNodeId,
                     IPAddress = "5.4.3.2",
-                    Power = new List<NodePower>(),
-                    Utilization = new List<NodeUtilization>(),
                 };
                 cluster.Nodes.Add(node);
             }
+            database.SaveChanges();
 
             // add some data for 7 days
-            for (int i = 0; i < 1 * 60 * 60 *24; i++)
+            for (int i = 0; i < 1 * 60 * 60 * 24; i++)
             {
                 // Add utilization information for the node (of Id 1)
-                node.Utilization.Add(new NodeUtilization()
+                database.UtilizationData.Add(new NodeUtilization()
                 {
+                    GlobalNodeId = node.GlobalId,
                     MemoryAvailable = 5,
                     MemoryUsed = 100 * 1000,
                     TimeStamp = DateTime.Now,
@@ -70,10 +83,12 @@ namespace JetsonService
                 });
 
                 // Add power use information for the node (of Id 1)
-                node.Power.Add(new NodePower() { Timestamp = DateTime.Now, Current = (i / 3) % 744, Voltage = (i / 4) % 4, Power = ((i / 3) % 744) * ((i / 4) % 4) });
+                database.PowerData.Add(new NodePower() { GlobalNodeId = node.GlobalId, Timestamp = DateTime.Now, Current = (i / 3) % 744, Voltage = (i / 4) % 4, Power = ((i / 3) % 744) * ((i / 4) % 4) });
             }
             // Save changes to the database
             database.SaveChanges();
+
+            database.Dispose();
         }
     }
 }

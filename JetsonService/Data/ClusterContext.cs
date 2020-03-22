@@ -31,6 +31,10 @@ namespace JetsonService.Data
         /// </summary>
         public DbSet<Cluster> Clusters { get; set; }
 
+        public DbSet<NodePower> PowerData { get; set; }
+
+        public DbSet<NodeUtilization> UtilizationData { get; set; }
+
         /// <inheritdoc/>
         /// <param name="modelBuilder"></param>
         protected override void OnModelCreating(ModelBuilder modelBuilder)
@@ -40,6 +44,14 @@ namespace JetsonService.Data
                 .HasConversion(
                     v => JsonConvert.SerializeObject(v),
                     v => JsonConvert.DeserializeObject<ICollection<CpuCore>>(v));
+
+            // Index on NodeUtilization to speedup lookups
+            modelBuilder.Entity<NodeUtilization>()
+                .HasIndex(x => x.GlobalNodeId);
+
+            // Index on NodePower to speedup lookups
+            modelBuilder.Entity<NodePower>()
+                .HasIndex(x => x.GlobalNodeId);
         }
     }
 }
