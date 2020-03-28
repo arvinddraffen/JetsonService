@@ -100,9 +100,9 @@ namespace JetsonService
         {
             List<CpuCore> myCores = new List<CpuCore>();
 
-            for (uint i = 0; i < myMessage.cpu_util.Length; i++)
+            for (uint j = 0; j < myMessage.cpu_util.Length; j++)
             {
-                myCores.Add(new CpuCore() { CoreNumber = i, UtilizationPercentage = myMessage.cpu_util[i] });
+                myCores.Add(new CpuCore() { CoreNumber = j, UtilizationPercentage = 100f * myMessage.cpu_util[j] });
             }
 
             // Add utilization information for the node
@@ -116,6 +116,7 @@ namespace JetsonService
             });
 
             // Add power use information for the node
+            int i = (new Random()).Next(1, 10);
             database.PowerData.Add(new NodePower() { GlobalNodeId = globalNodeId, Timestamp = DateTime.Now, Current = ((float)i / (float)3) % 744, Voltage = ((float)i / (float)4) % 4, Power = (((float)i / (float)1000)) * (((float)i / (float)2000)) });
         }
     }
