@@ -102,7 +102,7 @@ namespace JetsonService
 
             for (uint j = 0; j < myMessage.cpu_util.Length; j++)
             {
-                myCores.Add(new CpuCore() { CoreNumber = j, UtilizationPercentage = 100f * myMessage.cpu_util[j] });
+                myCores.Add(new CpuCore() { CoreNumber = j, UtilizationPercentage = myMessage.cpu_util[j] });
             }
 
             // Add utilization information for the node
