@@ -4,6 +4,7 @@ using System.Text;
 
 using JetsonModels;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using Newtonsoft.Json;
 
 namespace JetsonService.Data
@@ -39,19 +40,88 @@ namespace JetsonService.Data
         /// <param name="modelBuilder"></param>
         protected override void OnModelCreating(ModelBuilder modelBuilder)
         {
+            this.SetupPrimaryKeys(modelBuilder);
+            this.SetupValueConversions(modelBuilder);
+            this.SetupIndexes(modelBuilder);
+        }
+
+        /// <summary>
+        /// Assigns primary keys and associated database generation strategies to the storage types defined in <see cref="JetsonModels"/>.
+        /// </summary>
+        /// <param name="modelBuilder"></param>
+        private void SetupPrimaryKeys(ModelBuilder modelBuilder)
+        {
+            modelBuilder.Entity<Cluster>()
+                .HasKey(x => x.Id);
+
+            modelBuilder.Entity<Node>()
+                .HasKey(x => x.GlobalId);
+            modelBuilder.Entity<Node>()
+                .Property(x => x.GlobalId)
+                .ValueGeneratedOnAdd();
+
+            modelBuilder.Entity<NodePower>()
+              .HasKey(x => x.Id);
+            modelBuilder.Entity<NodePower>()
+                .Property(x => x.Id)
+                .ValueGeneratedOnAdd();
+
+            modelBuilder.Entity<NodeUtilization>()
+                .HasKey(x => x.Id);
+            modelBuilder.Entity<NodeUtilization>()
+                .Property(x => x.Id)
+                .ValueGeneratedOnAdd();
+        }
+
+        /// <summary>
+        /// Assigns <see cref="ValueConverter"/>s to properties in <see cref="JetsonModels"/> to optimize storage in SQLite.
+        /// </summary>
+        /// <param name="modelBuilder"></param>
+        private void SetupValueConversions(ModelBuilder modelBuilder)
+        {
+            //modelBuilder.Entity<NodeUtilization>()
+            //  .Property(x => x.Cores)
+            //  .HasConversion(
+            //      v => JsonConvert.SerializeObject(v),
+            //      v => JsonConvert.DeserializeObject<ICollection<CpuCore>>(v));
+
+            // Setup value conversion for CpuCore since CPU cores don't need primary keys
             modelBuilder.Entity<NodeUtilization>()
                 .Property(x => x.Cores)
-                .HasConversion(
-                    v => JsonConvert.SerializeObject(v),
-                    v => JsonConvert.DeserializeObject<ICollection<CpuCore>>(v));
+                .HasConversion(new CpuCoreToStringConverter());
 
-            // Index on NodeUtilization to speedup lookups
+            // Store Timestamps as Integer type in SQLite, not TEXT.
+            // Human readability is not critical, but ordering and lookup speed by relative time is.
+            modelBuilder.Entity<NodeUtilization>()
+                .Property(x => x.TimeStamp)
+                .HasConversion(new DateTimeToTicksConverter());
+
+            modelBuilder.Entity<NodePower>()
+                .Property(x => x.Timestamp)
+                .HasConversion(new DateTimeToTicksConverter());
+        }
+
+        /// <summary>
+        /// Creates database indexes to speedup lookups on frequently used properties in <see cref="JetsonModels"/>.
+        /// </summary>
+        /// <param name="modelBuilder"></param>
+        private void SetupIndexes(ModelBuilder modelBuilder)
+        {
+            // Index on NodeUtilization GlobalNodeId to speedup lookups
             modelBuilder.Entity<NodeUtilization>()
                 .HasIndex(x => x.GlobalNodeId);
 
-            // Index on NodePower to speedup lookups
+            // Index on NodePower GlobalNodeId to speedup lookups
             modelBuilder.Entity<NodePower>()
                 .HasIndex(x => x.GlobalNodeId);
+
+            // Index on NodeUtilization TimeStamp to speedup lookups
+            modelBuilder.Entity<NodeUtilization>()
+                .HasIndex(x => x.TimeStamp);
+
+            // Index on NodePower TimeStamp to speedup lookups
+            modelBuilder.Entity<NodePower>()
+                .HasIndex(x => x.Timestamp);
         }
     }
 }

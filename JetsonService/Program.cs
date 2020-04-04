@@ -37,6 +37,9 @@ namespace JetsonService
                 cluster = new Cluster();
                 cluster.Id = sampleClusterId;
                 cluster.Nodes = new List<Node>();
+                cluster.RefreshRate = TimeSpan.FromSeconds(5);
+                cluster.clusterType = Cluster.ClusterType.Jetson;
+                cluster.ClusterName = "Jetson 2.0";
                 database.Clusters.Add(cluster);
             }
 
@@ -60,11 +63,16 @@ namespace JetsonService
             }
 
             // add some data for 7 days
-            for (int entry = 0; entry < 1 * 60 * 60 * 24; entry++)
+            for (int entry = 0; entry < 1 * 60 * 60 * 24 * 7; entry++)
             {
                 foreach (var node in cluster.Nodes)
                 {
                     WriteUtilizationData(database, node.GlobalId, entry);
+                }
+
+                if (entry % 100000 == 0)
+                {
+                    database.SaveChanges();
                 }
             }
 
@@ -76,13 +84,16 @@ namespace JetsonService
 
         private static void WriteUtilizationData(ClusterContext database, uint globalNodeId, int i)
         {
+            var startTime = new DateTime(2020, 3, 27, 00, 00, 00);
+            var thisTime = startTime.AddSeconds(i);
+
             // Add utilization information for the node (of Id 1)
             database.UtilizationData.Add(new NodeUtilization()
             {
                 GlobalNodeId = globalNodeId,
                 MemoryAvailable = 5,
                 MemoryUsed = 100 * 1000,
-                TimeStamp = DateTime.Now,
+                TimeStamp = thisTime,
                 Cores = new List<CpuCore>()
                         {
                             new CpuCore() { CoreNumber = 0, UtilizationPercentage = i / 2 },
@@ -91,7 +102,14 @@ namespace JetsonService
             });
 
             // Add power use information for the node (of Id 1)
-            database.PowerData.Add(new NodePower() { GlobalNodeId = globalNodeId, Timestamp = DateTime.Now, Current = ((float)i / (float)3) % 744, Voltage = ((float)i / (float)4) % 4, Power = (((float)i / (float)1000)) * (((float)i / (float)2000)) });
+            database.PowerData.Add(new NodePower()
+                {
+                    GlobalNodeId = globalNodeId,
+                    Timestamp = thisTime,
+                    Current = ((float)i / (float)3) % 744,
+                    Voltage = ((float)i / (float)4) % 4,
+                    Power = (((float)i / (float)1000)) * (((float)i / (float)2000)),
+                });
         }
     }
 }
