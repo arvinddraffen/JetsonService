@@ -2,14 +2,14 @@
 using System.Collections.Generic;
 using System.Linq;
 
-using JetsonModels;
-using JetsonService.Data;
+using JetsonModels.Context;
+using JetsonModels.Database;
 using Microsoft.EntityFrameworkCore;
 
-namespace JetsonService
+namespace JetsonTestService
 {
     /// <summary>
-    /// <see cref="Program"/> is the main entry point into JetsonService.
+    /// <see cref="Program"/> is the main entry point into JetsonTestService.
     /// </summary>
     internal class Program
     {
@@ -20,10 +20,7 @@ namespace JetsonService
             var x = new System.Diagnostics.Stopwatch();
             x.Start();
 
-            var optionsBuilder = new DbContextOptionsBuilder<ClusterContext>();
-            optionsBuilder.EnableSensitiveDataLogging();
-            optionsBuilder.UseSqlite("Data Source=data.db");
-            var database = new ClusterContext(optionsBuilder.Options);
+            ClusterContext database = new ClusterContext();
 
             /* Sample code for providing an entry into the database */
 
@@ -34,12 +31,14 @@ namespace JetsonService
 
             if (cluster == null)
             {
-                cluster = new Cluster();
-                cluster.Id = sampleClusterId;
-                cluster.Nodes = new List<Node>();
-                cluster.RefreshRate = TimeSpan.FromSeconds(5);
-                cluster.clusterType = Cluster.ClusterType.Jetson;
-                cluster.ClusterName = "Jetson 2.0";
+                cluster = new Cluster
+                {
+                    Id = sampleClusterId,
+                    Nodes = new List<Node>(),
+                    RefreshRate = TimeSpan.FromSeconds(5),
+                    Type = Cluster.ClusterType.Jetson,
+                    ClusterName = "Jetson 2.0",
+                };
                 database.Clusters.Add(cluster);
             }
 
@@ -63,6 +62,7 @@ namespace JetsonService
             }
 
             // add some data for 7 days
+            int dayCounter = 1;
             for (int entry = 0; entry < 1 * 60 * 60 * 24 * 7; entry++)
             {
                 foreach (var node in cluster.Nodes)
@@ -72,6 +72,8 @@ namespace JetsonService
 
                 if (entry % 100000 == 0)
                 {
+                    Console.WriteLine($"Completed approx. day {dayCounter}");
+                    dayCounter++;
                     database.SaveChanges();
                 }
             }
@@ -79,7 +81,7 @@ namespace JetsonService
             database.SaveChanges();
 
             x.Stop();
-            Console.WriteLine($"Completed test build in {x.Elapsed.TotalSeconds} sec");
+            Console.WriteLine($"Completed database test build in {x.Elapsed.TotalSeconds} sec");
         }
 
         private static void WriteUtilizationData(ClusterContext database, uint globalNodeId, int i)
@@ -106,9 +108,9 @@ namespace JetsonService
                 {
                     GlobalNodeId = globalNodeId,
                     Timestamp = thisTime,
-                    Current = ((float)i / (float)3) % 744,
-                    Voltage = ((float)i / (float)4) % 4,
-                    Power = (((float)i / (float)1000)) * (((float)i / (float)2000)),
+                    Current = (i / 3F) % 744,
+                    Voltage = (i / 4F) % 4,
+                    Power = (i / 1000F) * (i / 2000F),
                 });
         }
     }
