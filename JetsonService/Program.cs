@@ -14,7 +14,7 @@ struct UpdateMessage
     public String NIP;  // IPv4 address
     public float[] cpu_util;    // %
     public String OS;   // name of operating system
-    public TimeSpan period; // period of updates
+    public TimeSpan utime; // uptime of the node
 };
 
 namespace JetsonService
@@ -69,7 +69,7 @@ namespace JetsonService
                         Id = myMessage.NID,
                         IPAddress = myMessage.NIP,
                         OperatingSystem = myMessage.OS,
-                        UpTime = myMessage.period,
+                        UpTime = myMessage.utime,
                     };
                     cluster.Nodes.Add(node);
                 }
