@@ -3,19 +3,26 @@ using System.Collections.Generic;
 using System.Threading.Tasks;
 
 using JetsonModels;
-using JetsonService.Data;
+using JetsonModels.Database;
 using Microsoft.EntityFrameworkCore;
 using RestSharp;
+using System.Linq;
+using Newtonsoft.Json;
+using System.Net;
+using System.Threading;
 
-struct UpdateMessage
+public class UpdateMessage
 {
-    public uint CID, NID;   // Cluster ID, Node ID
-    public uint freemem, usedmem;   // MB
-    public String NIP;  // IPv4 address
-    public float[] cpu_util;    // %
-    public String OS;   // name of operating system
-    public TimeSpan utime; // uptime of the node
-};
+    public uint CID { get; set; }   // Cluster ID
+    public uint NID { get; set; }   // Node ID
+    public uint freemem { get; set; }   // MB
+    public uint usedmem { get; set; }   // MB
+    public String NIP { get; set; }  // IPv4 address
+    public float[] cpuutil { get; set; }    // %
+    public String OS { get; set; }   // name of operating system
+    public TimeSpan utime { get; set; } // uptime of the node
+    public int frequency;   //Hz
+}
 
 namespace JetsonService
 {
@@ -24,27 +31,36 @@ namespace JetsonService
     /// </summary>
     internal class Program
     {
-        static List<string> NodeIPs = new List<string>();
+        static string[] NodeIPs;
 
-        static ClusterContext database;
+        static JetsonModels.Context.ClusterContext database;
 
         private static readonly object myLock = new object();
 
         private static void Init()
         {
             string ConfigFile = System.IO.File.ReadAllText(@"JetsonServiceConfig.txt");
-            string[] SplitConfigFile = ConfigFile.Split(new Char[] { '\n' });
-            NodeIPs.AddRange(SplitConfigFile);
+            NodeIPs = ConfigFile.Split(new Char[] { '\n' });
         }
 
         private static void ReceiveMessage(int index)
         {
-            while(true)
+            int frequency = 1;
+            while (true)
             {
-                var client = new RestClient("https://" + NodeIPs[index]);
-                var request = new RestRequest(Method.GET);
+                Thread.Sleep(1000 / frequency);
+
+                var client = new RestClient("http://" + NodeIPs[index]);
+                var request = new RestRequest("/nodeupdate/", Method.GET);
                 request.RequestFormat = DataFormat.Json;
-                var myMessage = client.Execute<UpdateMessage>(request).Data;    // Execute is synchronous, so it should block until request is received.
+                UpdateMessage myMessage;
+                do
+                {
+                    myMessage = client.Execute<UpdateMessage>(request).Data;
+                }
+                while (myMessage == null);
+
+                frequency = myMessage.frequency;
 
                 // Find cluster with received Id. If not exists, create new cluster
                 var cluster = database.Clusters
@@ -87,15 +103,12 @@ namespace JetsonService
         {
             Init();
 
-            var optionsBuilder = new DbContextOptionsBuilder<ClusterContext>();
-            optionsBuilder.EnableSensitiveDataLogging();
-            optionsBuilder.UseSqlite("Data Source=data.db");
-            database = new ClusterContext(optionsBuilder.Options);
+            database = new JetsonModels.Context.ClusterContext();
 
-            Task[] myTasks = new Task[NodeIPs.Count];
-            for (int i = 0; i < NodeIPs.Count; i++)
+            Task[] myTasks = new Task[NodeIPs.Length];
+            for (int i = 0; i < NodeIPs.Length; i++)
             {
-                myTasks[i] = Task.Factory.StartNew(() => ReceiveMessage(i));
+                myTasks[i] = Task.Factory.StartNew(o => ReceiveMessage((int)o), i);
             }
             Task.WaitAll(myTasks);
         }
@@ -104,24 +117,21 @@ namespace JetsonService
         {
             List<CpuCore> myCores = new List<CpuCore>();
 
-            for (uint j = 0; j < myMessage.cpu_util.Length; j++)
+            for (uint j = 0; j < myMessage.cpuutil.Length; j++)
             {
-                myCores.Add(new CpuCore() { CoreNumber = j, UtilizationPercentage = myMessage.cpu_util[j] });
+                myCores.Add(new CpuCore() { CoreNumber = j, UtilizationPercentage = myMessage.cpuutil[j] });
             }
 
             // Add utilization information for the node
             database.UtilizationData.Add(new NodeUtilization()
             {
-                GlobalNodeId = globalNodeId,
-                MemoryAvailable = myMessage.freemem,
-                MemoryUsed = myMessage.usedmem,
+                Id = myMessage.NID,
                 TimeStamp = DateTime.Now,
                 Cores = myCores,
+                MemoryAvailable = myMessage.freemem,
+                MemoryUsed = myMessage.usedmem,
+                GlobalNodeId = globalNodeId,
             });
-
-            // Add power use information for the node
-            int i = (new Random()).Next(1, 10);
-            database.PowerData.Add(new NodePower() { GlobalNodeId = globalNodeId, Timestamp = DateTime.Now, Current = ((float)i / (float)3) % 744, Voltage = ((float)i / (float)4) % 4, Power = (((float)i / (float)1000)) * (((float)i / (float)2000)) });
         }
     }
 }
