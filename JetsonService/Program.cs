@@ -21,7 +21,7 @@ public class UpdateMessage
     public float[] cpuutil { get; set; }    // %
     public String OS { get; set; }   // name of operating system
     public TimeSpan utime { get; set; } // uptime of the node
-    public int frequency;   //Hz
+    public int frequency { get; set; }   //Hz
 }
 
 namespace JetsonService
@@ -51,12 +51,12 @@ namespace JetsonService
                 Thread.Sleep(1000 / frequency);
 
                 var client = new RestClient("http://" + NodeIPs[index]);
-                var request = new RestRequest("/nodeupdate/", Method.GET);
-                request.RequestFormat = DataFormat.Json;
+                var request = new RestRequest("/nodeupdate", Method.GET);
                 UpdateMessage myMessage;
                 do
                 {
-                    myMessage = client.Execute<UpdateMessage>(request).Data;
+                    var content = client.Execute(request).Content;
+                    myMessage = JsonConvert.DeserializeObject<UpdateMessage>(content);
                 }
                 while (myMessage == null);
 
