@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.Threading.Tasks;
 
@@ -72,6 +72,9 @@ namespace JetsonService
                     cluster = new Cluster();
                     cluster.Id = myMessage.CID;
                     cluster.Nodes = new List<Node>();
+                    cluster.RefreshRate = TimeSpan.FromMilliseconds(1000/frequency);
+                    cluster.Type = Cluster.ClusterType.Jetson;
+                    cluster.ClusterName = "Jetson 2.0";
                     database.Clusters.Add(cluster);
                 }
 
@@ -131,6 +134,17 @@ namespace JetsonService
                 MemoryAvailable = myMessage.freemem,
                 MemoryUsed = myMessage.usedmem,
                 GlobalNodeId = globalNodeId,
+            });
+
+            int i = new Random().Next(1, 10);
+
+            database.PowerData.Add(new NodePower()
+            {
+                GlobalNodeId = globalNodeId,
+                Timestamp = DateTime.Now,
+                Current = (i / 3F) % 744,
+                Voltage = (i / 4F) % 4,
+                Power = (i / 1000F) * (i / 2000F),
             });
         }
     }
