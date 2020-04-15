@@ -113,6 +113,26 @@ namespace JetsonService
             {
                 myTasks[i] = Task.Factory.StartNew(o => ReceiveMessage((int)o), i);
             }
+
+            while (true)
+            {
+                DateTime now = DateTime.Now;
+                var weekOldNodeUtils = database.UtilizationData.Where(x => now.Ticks - x.TimeStamp.Ticks >= new TimeSpan(7, 0, 0, 0).Ticks);
+                var weekOldPowerData = database.PowerData.Where(x => now.Ticks - x.Timestamp.Ticks >= new TimeSpan(7, 0, 0, 0).Ticks);
+                lock (myLock)
+                {
+                    foreach (NodeUtilization weekOldNodeUtil in weekOldNodeUtils)
+                    {
+                        database.UtilizationData.Remove(weekOldNodeUtil);
+                    }
+                    foreach (NodePower weekOldPowerDatum in weekOldPowerData)
+                    {
+                        database.PowerData.Remove(weekOldPowerDatum);
+                    }
+                    database.SaveChanges();
+                }
+            }
+
             Task.WaitAll(myTasks);
         }
 
