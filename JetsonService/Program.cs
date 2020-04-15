@@ -107,7 +107,7 @@ namespace JetsonService
             Init();
 
             var optionsBuilder = new DbContextOptionsBuilder<JetsonModels.Context.ClusterContext>();
-            optionsBuilder.UseSqlite("/var/lib/jetson.db");
+            optionsBuilder.UseSqlite("Data Source=/var/lib/jetson/data.db");
 
             var options = optionsBuilder.Options;
 
