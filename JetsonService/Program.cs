@@ -106,7 +106,12 @@ namespace JetsonService
         {
             Init();
 
-            database = new JetsonModels.Context.ClusterContext();
+            var optionsBuilder = new DbContextOptionsBuilder<JetsonModels.Context.ClusterContext>();
+            optionsBuilder.UseSqlite("/var/lib/jetson.db");
+
+            var options = optionsBuilder.Options;
+
+            database = new JetsonModels.Context.ClusterContext(options);
 
             Task[] myTasks = new Task[NodeIPs.Length];
             for (int i = 0; i < NodeIPs.Length; i++)
