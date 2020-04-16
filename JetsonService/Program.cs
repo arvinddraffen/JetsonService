@@ -33,8 +33,6 @@ namespace JetsonService
     {
         static string[] NodeIPs;
 
-        static JetsonModels.Context.ClusterContext database;
-
         private static readonly object myLock = new object();
 
         private static void Init()
@@ -45,6 +43,13 @@ namespace JetsonService
 
         private static void ReceiveMessage(int index)
         {
+            var optionsBuilder = new DbContextOptionsBuilder<JetsonModels.Context.ClusterContext>();
+            optionsBuilder.UseSqlite("Data Source=/var/lib/jetson/data.db");
+
+            var options = optionsBuilder.Options;
+
+            JetsonModels.Context.ClusterContext database = new JetsonModels.Context.ClusterContext(options);
+
             int frequency = 1;
             while (true)
             {
@@ -93,12 +98,10 @@ namespace JetsonService
                     cluster.Nodes.Add(node);
                 }
 
-                lock (myLock)
-                {
-                    database.SaveChanges();
-                    WriteUtilizationData(node.GlobalId, myMessage);
-                    database.SaveChanges();
-                }
+                database.SaveChanges();
+                WriteUtilizationData(node.GlobalId, myMessage, database);
+                database.SaveChanges();
+                
             }
         }
 
@@ -111,7 +114,7 @@ namespace JetsonService
 
             var options = optionsBuilder.Options;
 
-            database = new JetsonModels.Context.ClusterContext(options);
+            JetsonModels.Context.ClusterContext database = new JetsonModels.Context.ClusterContext(options);
 
             Task[] myTasks = new Task[NodeIPs.Length];
             for (int i = 0; i < NodeIPs.Length; i++)
@@ -124,24 +127,21 @@ namespace JetsonService
                 DateTime now = DateTime.Now;
                 var weekOldNodeUtils = database.UtilizationData.Where(x => now.Ticks - x.TimeStamp.Ticks >= new TimeSpan(7, 0, 0, 0).Ticks);
                 var weekOldPowerData = database.PowerData.Where(x => now.Ticks - x.Timestamp.Ticks >= new TimeSpan(7, 0, 0, 0).Ticks);
-                lock (myLock)
+                foreach (NodeUtilization weekOldNodeUtil in weekOldNodeUtils)
                 {
-                    foreach (NodeUtilization weekOldNodeUtil in weekOldNodeUtils)
-                    {
-                        database.UtilizationData.Remove(weekOldNodeUtil);
-                    }
-                    foreach (NodePower weekOldPowerDatum in weekOldPowerData)
-                    {
-                        database.PowerData.Remove(weekOldPowerDatum);
-                    }
-                    database.SaveChanges();
+                    database.UtilizationData.Remove(weekOldNodeUtil);
                 }
+                foreach (NodePower weekOldPowerDatum in weekOldPowerData)
+                {
+                    database.PowerData.Remove(weekOldPowerDatum);
+                }
+                database.SaveChanges();
             }
 
             Task.WaitAll(myTasks);
         }
 
-        private static void WriteUtilizationData(uint globalNodeId, UpdateMessage myMessage)
+        private static void WriteUtilizationData(uint globalNodeId, UpdateMessage myMessage, JetsonModels.Context.ClusterContext database)
         {
             List<CpuCore> myCores = new List<CpuCore>();
 
