@@ -33,8 +33,6 @@ namespace JetsonService
     {
         static string[] NodeIPs;
 
-        private static readonly object myLock = new object();
-
         private static void Init()
         {
             string ConfigFile = System.IO.File.ReadAllText(@"JetsonServiceConfig.txt");
@@ -99,7 +97,36 @@ namespace JetsonService
                 }
 
                 database.SaveChanges();
-                WriteUtilizationData(node.GlobalId, myMessage, database);
+
+                List<CpuCore> myCores = new List<CpuCore>();
+
+                for (uint j = 0; j < myMessage.cpuutil.Length; j++)
+                {
+                    myCores.Add(new CpuCore() { CoreNumber = j, UtilizationPercentage = myMessage.cpuutil[j] });
+                }
+
+                // Add utilization information for the node
+                database.UtilizationData.Add(new NodeUtilization()
+                {
+                    Id = myMessage.NID,
+                    TimeStamp = DateTime.Now,
+                    Cores = myCores,
+                    MemoryAvailable = myMessage.freemem,
+                    MemoryUsed = myMessage.usedmem,
+                    GlobalNodeId = node.GlobalId,
+                });
+
+                int i = new Random().Next(1, 10);
+
+                database.PowerData.Add(new NodePower()
+                {
+                    GlobalNodeId = node.GlobalId,
+                    Timestamp = DateTime.Now,
+                    Current = (i / 3F) % 744,
+                    Voltage = (i / 4F) % 4,
+                    Power = (i / 1000F) * (i / 2000F),
+                });
+
                 database.SaveChanges();
                 
             }
@@ -139,38 +166,6 @@ namespace JetsonService
             }
 
             Task.WaitAll(myTasks);
-        }
-
-        private static void WriteUtilizationData(uint globalNodeId, UpdateMessage myMessage, JetsonModels.Context.ClusterContext database)
-        {
-            List<CpuCore> myCores = new List<CpuCore>();
-
-            for (uint j = 0; j < myMessage.cpuutil.Length; j++)
-            {
-                myCores.Add(new CpuCore() { CoreNumber = j, UtilizationPercentage = myMessage.cpuutil[j] });
-            }
-
-            // Add utilization information for the node
-            database.UtilizationData.Add(new NodeUtilization()
-            {
-                Id = myMessage.NID,
-                TimeStamp = DateTime.Now,
-                Cores = myCores,
-                MemoryAvailable = myMessage.freemem,
-                MemoryUsed = myMessage.usedmem,
-                GlobalNodeId = globalNodeId,
-            });
-
-            int i = new Random().Next(1, 10);
-
-            database.PowerData.Add(new NodePower()
-            {
-                GlobalNodeId = globalNodeId,
-                Timestamp = DateTime.Now,
-                Current = (i / 3F) % 744,
-                Voltage = (i / 4F) % 4,
-                Power = (i / 1000F) * (i / 2000F),
-            });
         }
     }
 }
