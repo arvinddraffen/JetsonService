@@ -24,7 +24,7 @@ public class UpdateMessage
     public String NIP { get; set; }  // IPv4 address
     public float[] cpuutil { get; set; }    // %
     public String OS { get; set; }   // name of operating system
-    public TimeSpan utime { get; set; } // uptime of the node
+    public long utime { get; set; } // uptime of the node
     public int frequency { get; set; }   //Hz
 }
 
@@ -52,6 +52,7 @@ namespace JetsonService
         {
             var optionsBuilder = new DbContextOptionsBuilder<JetsonModels.Context.ClusterContext>();
             optionsBuilder.UseSqlite("Data Source=/var/lib/jetson/data.db");
+            //optionsBuilder.UseSqlite("Data Source=data.db");
 
             var options = optionsBuilder.Options;
 
@@ -83,7 +84,7 @@ namespace JetsonService
                     Id = myMessage.NID,
                     IPAddress = myMessage.NIP,
                     OperatingSystem = myMessage.OS,
-                    UpTime = myMessage.utime,
+                    UpTime = new TimeSpan(myMessage.utime),
                 };
                 cluster.Nodes.Add(node);
             }
@@ -117,7 +118,9 @@ namespace JetsonService
                 Power = (i / 1000F) * (i / 2000F),
             });
 
-            database.SaveChanges();
+            Console.WriteLine("Cluster ID = {0}", myMessage.CID);
+            Console.WriteLine("Node ID = {0}", myMessage.NID);
+            Console.WriteLine(database.SaveChanges());
         }
 
         private static void Main(string[] args)
@@ -134,6 +137,7 @@ namespace JetsonService
 
                 var optionsBuilder = new DbContextOptionsBuilder<JetsonModels.Context.ClusterContext>();
                 optionsBuilder.UseSqlite("Data Source=/var/lib/jetson/data.db");
+                //optionsBuilder.UseSqlite("Data Source=data.db");
 
                 var options = optionsBuilder.Options;
 
