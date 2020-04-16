@@ -10,6 +10,10 @@ using System.Linq;
 using Newtonsoft.Json;
 using System.Net;
 using System.Threading;
+using Nancy;
+using Nancy.Hosting.Self;
+using Nancy.Testing;
+using Nancy.Extensions;
 
 public class UpdateMessage
 {
@@ -26,20 +30,25 @@ public class UpdateMessage
 
 namespace JetsonService
 {
+    class NodeModule : NancyModule
+    {
+        public NodeModule()
+        {
+            Put("/nodeupdate", args => {
+                UpdateMessage myMessage = JsonConvert.DeserializeObject<UpdateMessage>(this.Request.Body.AsString());
+                Program.ReceiveMessage(myMessage);
+                return "Success";
+            });
+        }
+    }
+
+
     /// <summary>
     /// <see cref="Program"/> is the main entry point into JetsonService.
     /// </summary>
     internal class Program
     {
-        static string[] NodeIPs;
-
-        private static void Init()
-        {
-            string ConfigFile = System.IO.File.ReadAllText(@"JetsonServiceConfig.txt");
-            NodeIPs = ConfigFile.Split(new Char[] { '\n' });
-        }
-
-        private static void ReceiveMessage(int index)
+        public static void ReceiveMessage(UpdateMessage myMessage)
         {
             var optionsBuilder = new DbContextOptionsBuilder<JetsonModels.Context.ClusterContext>();
             optionsBuilder.UseSqlite("Data Source=/var/lib/jetson/data.db");
@@ -48,124 +57,106 @@ namespace JetsonService
 
             JetsonModels.Context.ClusterContext database = new JetsonModels.Context.ClusterContext(options);
 
-            int frequency = 1;
-            while (true)
+            // Find cluster with received Id. If not exists, create new cluster
+            var cluster = database.Clusters
+                .Include(c => c.Nodes)
+                .FirstOrDefault(c => c.Id == myMessage.CID);
+
+            if (cluster == null)
             {
-                Thread.Sleep(1000 / frequency);
+                cluster = new Cluster();
+                cluster.Id = myMessage.CID;
+                cluster.Nodes = new List<Node>();
+                cluster.RefreshRate = TimeSpan.FromMilliseconds(1000/myMessage.frequency);
+                cluster.Type = Cluster.ClusterType.Jetson;
+                cluster.ClusterName = "Jetson 2.0";
+                database.Clusters.Add(cluster);
+            }
 
-                var client = new RestClient("http://" + NodeIPs[index]);
-                var request = new RestRequest("/nodeupdate", Method.GET);
-                UpdateMessage myMessage;
-                do
-                {
-                    var content = client.Execute(request).Content;
-                    myMessage = JsonConvert.DeserializeObject<UpdateMessage>(content);
-                }
-                while (myMessage == null);
+            //// Find in cluster with given node Id. If not exists, create new node
+            var node = cluster.Nodes.FirstOrDefault(n => n.Id == myMessage.NID);
 
-                frequency = myMessage.frequency;
-
-                // Find cluster with received Id. If not exists, create new cluster
-                var cluster = database.Clusters
-                    .Include(c => c.Nodes)
-                    .FirstOrDefault(c => c.Id == myMessage.CID);
-
-                if (cluster == null)
-                {
-                    cluster = new Cluster();
-                    cluster.Id = myMessage.CID;
-                    cluster.Nodes = new List<Node>();
-                    cluster.RefreshRate = TimeSpan.FromMilliseconds(1000/frequency);
-                    cluster.Type = Cluster.ClusterType.Jetson;
-                    cluster.ClusterName = "Jetson 2.0";
-                    database.Clusters.Add(cluster);
-                }
-
-                //// Find in cluster with given node Id. If not exists, create new node
-                var node = cluster.Nodes.FirstOrDefault(n => n.Id == myMessage.NID);
-
-                if (node == null)
-                {
-                    node = new Node()
-                    {
-                        Id = myMessage.NID,
-                        IPAddress = myMessage.NIP,
-                        OperatingSystem = myMessage.OS,
-                        UpTime = myMessage.utime,
-                    };
-                    cluster.Nodes.Add(node);
-                }
-
-                database.SaveChanges();
-
-                List<CpuCore> myCores = new List<CpuCore>();
-
-                for (uint j = 0; j < myMessage.cpuutil.Length; j++)
-                {
-                    myCores.Add(new CpuCore() { CoreNumber = j, UtilizationPercentage = myMessage.cpuutil[j] });
-                }
-
-                // Add utilization information for the node
-                database.UtilizationData.Add(new NodeUtilization()
+            if (node == null)
+            {
+                node = new Node()
                 {
                     Id = myMessage.NID,
-                    TimeStamp = DateTime.Now,
-                    Cores = myCores,
-                    MemoryAvailable = myMessage.freemem,
-                    MemoryUsed = myMessage.usedmem,
-                    GlobalNodeId = node.GlobalId,
-                });
-
-                int i = new Random().Next(1, 10);
-
-                database.PowerData.Add(new NodePower()
-                {
-                    GlobalNodeId = node.GlobalId,
-                    Timestamp = DateTime.Now,
-                    Current = (i / 3F) % 744,
-                    Voltage = (i / 4F) % 4,
-                    Power = (i / 1000F) * (i / 2000F),
-                });
-
-                database.SaveChanges();
-                
+                    IPAddress = myMessage.NIP,
+                    OperatingSystem = myMessage.OS,
+                    UpTime = myMessage.utime,
+                };
+                cluster.Nodes.Add(node);
             }
+
+            List<CpuCore> myCores = new List<CpuCore>();
+
+            for (uint j = 0; j < myMessage.cpuutil.Length; j++)
+            {
+                myCores.Add(new CpuCore() { CoreNumber = j, UtilizationPercentage = myMessage.cpuutil[j] });
+            }
+
+            // Add utilization information for the node
+            database.UtilizationData.Add(new NodeUtilization()
+            {
+                Id = myMessage.NID,
+                TimeStamp = DateTime.Now,
+                Cores = myCores,
+                MemoryAvailable = myMessage.freemem,
+                MemoryUsed = myMessage.usedmem,
+                GlobalNodeId = node.GlobalId,
+            });
+
+            int i = new Random().Next(1, 10);
+
+            database.PowerData.Add(new NodePower()
+            {
+                GlobalNodeId = node.GlobalId,
+                Timestamp = DateTime.Now,
+                Current = (i / 3F) % 744,
+                Voltage = (i / 4F) % 4,
+                Power = (i / 1000F) * (i / 2000F),
+            });
+
+            database.SaveChanges();
         }
 
         private static void Main(string[] args)
         {
-            Init();
-
-            var optionsBuilder = new DbContextOptionsBuilder<JetsonModels.Context.ClusterContext>();
-            optionsBuilder.UseSqlite("Data Source=/var/lib/jetson/data.db");
-
-            var options = optionsBuilder.Options;
-
-            JetsonModels.Context.ClusterContext database = new JetsonModels.Context.ClusterContext(options);
-
-            Task[] myTasks = new Task[NodeIPs.Length];
-            for (int i = 0; i < NodeIPs.Length; i++)
+            HostConfiguration hostConfigs = new HostConfiguration();
+            hostConfigs.UrlReservations.CreateAutomatically = true;
+            var bootstrapper = new ConfigurableBootstrapper(with =>
             {
-                myTasks[i] = Task.Factory.StartNew(o => ReceiveMessage((int)o), i);
-            }
-
-            while (true)
+                with.Module<NodeModule>();
+            });
+            using (var nancyHost = new NancyHost(bootstrapper, hostConfigs, new Uri("http://localhost:9200/")))
             {
-                DateTime now = DateTime.Now;
-                var weekOldNodeUtils = database.UtilizationData.Where(x => now.Ticks - x.TimeStamp.Ticks >= new TimeSpan(7, 0, 0, 0).Ticks);
-                var weekOldPowerData = database.PowerData.Where(x => now.Ticks - x.Timestamp.Ticks >= new TimeSpan(7, 0, 0, 0).Ticks);
-                foreach (NodeUtilization weekOldNodeUtil in weekOldNodeUtils)
-                {
-                    database.UtilizationData.Remove(weekOldNodeUtil);
-                }
-                foreach (NodePower weekOldPowerDatum in weekOldPowerData)
-                {
-                    database.PowerData.Remove(weekOldPowerDatum);
-                }
-                database.SaveChanges();
-            }
+                nancyHost.Start();
 
-            Task.WaitAll(myTasks);
+                var optionsBuilder = new DbContextOptionsBuilder<JetsonModels.Context.ClusterContext>();
+                optionsBuilder.UseSqlite("Data Source=/var/lib/jetson/data.db");
+
+                var options = optionsBuilder.Options;
+
+                JetsonModels.Context.ClusterContext database = new JetsonModels.Context.ClusterContext(options);
+
+                while (true)
+                {
+                    DateTime now = DateTime.Now;
+                    var weekOldNodeUtils = database.UtilizationData.Where(x => now.Ticks - x.TimeStamp.Ticks >= new TimeSpan(7, 0, 0, 0).Ticks);
+                    var weekOldPowerData = database.PowerData.Where(x => now.Ticks - x.Timestamp.Ticks >= new TimeSpan(7, 0, 0, 0).Ticks);
+                    foreach (NodeUtilization weekOldNodeUtil in weekOldNodeUtils)
+                    {
+                        database.UtilizationData.Remove(weekOldNodeUtil);
+                    }
+                    foreach (NodePower weekOldPowerDatum in weekOldPowerData)
+                    {
+                        database.PowerData.Remove(weekOldPowerDatum);
+                    }
+                    if (weekOldNodeUtils.ToArray<NodeUtilization>().Count<NodeUtilization>() != 0 || weekOldPowerData.ToArray<NodePower>().Count<NodePower>() != 0)
+                        database.SaveChanges();
+                }
+            }
+            
         }
     }
 }
