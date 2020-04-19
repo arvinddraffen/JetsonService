@@ -68,11 +68,14 @@ namespace JetsonService
                 cluster = new Cluster();
                 cluster.Id = myMessage.CID;
                 cluster.Nodes = new List<Node>();
-                cluster.RefreshRate = TimeSpan.FromMilliseconds(1000/myMessage.frequency);
+                cluster.RefreshRate = TimeSpan.FromMilliseconds(1000 / myMessage.frequency);
                 cluster.Type = Cluster.ClusterType.Jetson;
                 cluster.ClusterName = "Jetson 2.0";
                 database.Clusters.Add(cluster);
+
             }
+
+
 
             //// Find in cluster with given node Id. If not exists, create new node
             var node = cluster.Nodes.FirstOrDefault(n => n.Id == myMessage.NID);
@@ -87,7 +90,11 @@ namespace JetsonService
                     UpTime = new TimeSpan(myMessage.utime),
                 };
                 cluster.Nodes.Add(node);
+                database.SaveChanges();
+
             }
+
+            Console.WriteLine("Cluster {0} has {1} nodes.", cluster.Id, cluster.Nodes.Count);
 
             List<CpuCore> myCores = new List<CpuCore>();
 
@@ -99,13 +106,14 @@ namespace JetsonService
             // Add utilization information for the node
             database.UtilizationData.Add(new NodeUtilization()
             {
-                Id = myMessage.NID,
                 TimeStamp = DateTime.Now,
                 Cores = myCores,
                 MemoryAvailable = myMessage.freemem,
                 MemoryUsed = myMessage.usedmem,
                 GlobalNodeId = node.GlobalId,
             });
+
+            database.SaveChanges();
 
             int i = new Random().Next(1, 10);
 
@@ -120,6 +128,7 @@ namespace JetsonService
 
             Console.WriteLine("Cluster ID = {0}", myMessage.CID);
             Console.WriteLine("Node ID = {0}", myMessage.NID);
+            Console.WriteLine("GlobalID = {0}", node.GlobalId);
             Console.WriteLine(database.SaveChanges());
         }
 
@@ -160,7 +169,7 @@ namespace JetsonService
                         database.SaveChanges();
                 }
             }
-            
+
         }
     }
 }
