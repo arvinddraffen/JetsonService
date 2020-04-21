@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Threading.Tasks;
+using System.Runtime.Loader;
 
 using JetsonModels;
 using JetsonModels.Database;
@@ -132,8 +133,21 @@ namespace JetsonService
             Console.WriteLine(database.SaveChanges());
         }
 
+        private static void SigTermEventHandler(AssemblyLoadContext obj)
+        {
+            System.Console.WriteLine("Unloading...");
+        }
+
+        private static void CancelHandler(object sender, ConsoleCancelEventArgs e)
+        {
+            System.Console.WriteLine("Exiting...");
+        }
+
         private static void Main(string[] args)
         {
+            AssemblyLoadContext.Default.Unloading += SigTermEventHandler; //register sigterm event handler. Don't forget to import System.Runtime.Loader!
+            Console.CancelKeyPress += CancelHandler; //register sigint event handler
+
             HostConfiguration hostConfigs = new HostConfiguration();
             hostConfigs.UrlReservations.CreateAutomatically = true;
             var bootstrapper = new ConfigurableBootstrapper(with =>
